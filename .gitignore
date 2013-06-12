@@ -1,4 +1,73 @@
-*.log
-*.pot
-*.pyc
-local_settings.py
+from django import forms
+from django.core.exceptions import ValidationError
+from django.forms.widgets import RadioSelect,NullBooleanSelect
+from WebApp.models import User,UserProfile
+
+class RegisterForm(forms.Form):
+    CHOICES = (('Male', 'Male',), ('Female', 'Female',),)
+    username=forms.CharField(max_length=30,widget=forms.TextInput(attrs={'placeholder':'UserName'}))
+    email=forms.EmailField(max_length=75,widget=forms.TextInput(attrs={'placeholder':'Email'}))
+    first_name=forms.CharField(max_length=30,widget=forms.TextInput(attrs={'placeholder':'FirstName'}))
+    last_name=forms.CharField(max_length=30,widget=forms.TextInput(attrs={'placeholder':'LastName'}))
+    date_of_birth=forms.DateField(widget=forms.TextInput(attrs={'placeholder':'DateOfBirth'}))
+    password=forms.CharField(widget=forms.PasswordInput(attrs={'placeholder':'password'}))
+    gen = forms.ChoiceField(widget=RadioSelect,choices=CHOICES)
+    ctrmpassword=forms.CharField(widget=forms.PasswordInput(attrs={'placeholder':'confirm password'}))
+    agreed=forms.BooleanField(error_messages={'required': 'You must accept the terms and conditions'})
+
+    def clean_username(self):
+        unm=self.cleaned_data['username']
+        if User.objects.filter(username=unm).exists():
+            raise ValidationError('This username is already taken.')
+        return unm
+
+    def clean_email(self):
+        em=self.cleaned_data['email']
+        if User.objects.filter(email=em).exists():
+            raise ValidationError('This email is already taken.')
+        return em
+
+    def clean(self):
+        cleaned_data=self.cleaned_data
+        pwd = self.cleaned_data.get('password')
+        cpwd= self.cleaned_data.get('ctrmpassword')
+        if not pwd==cpwd:
+            self._errors['ctrmpassword']=self.error_class(['password do not match'])
+            del self.cleaned_data['ctrmpassword']
+        return cleaned_data
+
+    def save(self):
+        cd=self.cleaned_data
+        u=User(username=cd['username'],
+               first_name=cd['first_name'],
+               last_name=cd['last_name'],
+               email=cd['email'],
+           )
+        u.set_password(cd['password'])
+        u.save()
+
+        p=u.profile
+        p.gender=cd['gen']
+        p.date_of_birth=cd['date_of_birth']
+        p.save()
+        return u
+
+
+
+class LoginForm(forms.Form):
+    password=forms.CharField(widget=forms.PasswordInput(attrs={'placeholder':'password'}))
+    email=forms.EmailField(max_length=75,widget=forms.TextInput(attrs={'placeholder':'Email'}))
+
+
+
+
+class ProfileForm(forms.ModelForm):
+    #picture_path=forms.FileField( label='Select a file', help_text='max. 42 megabytes')
+    class Meta:
+        model=UserProfile
+        exclude=('user', )
+
+    def __init__(self, *args, **kwargs):
+        super(ProfileForm, self).__init__(*args, **kwargs)
+        self.fields['date_of_birth'].widget=forms.DateInput(format='%d/%m/%Y', attrs={'data-format':'dd/MM/yyyy'})
+        self.fields['time_of_birth'].widget=forms.TimeInput(format='%H:%M:%S', attrs={'data-format':'hh:mm:ss'})
